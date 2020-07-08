@@ -1,0 +1,1368 @@
+*         ***     *     ***   ****   ****    ***   ****    ***   *   *  ****   *
+*        *   *   * *   *   *  *   *  *   *  *   *   *  *  *   *  *   *  *   *  *
+*         *     *   *   *     *   *  *   *  *   *   *  *   *     *   *  *   *  *
+*          *    *****    *    ****   ****   *   *   ***     *    *   *  ****   *
+*           *   *   *     *   *      * *    *   *   *  *     *   *   *  *      *
+*        *   *  *   *  *   *  *      *  *   *   *   *  *  *   *  *   *  *      *
+*         ***   *   *   ***   *      *   *   ***   ****    ***    ***   *      *;
+/*			                   Generated with proc explode.                        */
+
+/* Author: Daniel Mattei. https://www.linkedin.com/in/daniel-mattei-392929137/ */
+/* Maintainer: Daniel Mattei <DMattei@live.com>			                  	       */
+/* Version 1.0							                                           	       */
+
+/* This program is an implementation of RProbSup's functionality in SAS.  	             */
+/* It is designed for those interested in computing variants of the A statistic, a       */
+/* non-parametric form of the common language (CL) effect-size statistic.                */
+/* Although this program uses SAS/IML, it is designed for those most comfortable         */
+/* With Base SAS - No interaction with SAS/IML is required, simply the macro program     */
+/* provided and a few macro variables. However, the SAS/IML functions called by the      */
+/* macro were also designed themselves to be called directly. 			                   	 */
+/* A dataset from the DATA step is the expected input for the dsn= parameter of the      */
+/* macro program.            								                                             */
+/* Results are exported as a .sas7bdat file with output displayed for immediate viewing. */
+/* Required Licenses: SAS/STAT | SAS/IML                                                 */
+
+/* Special thanks to Rick Wicklin for his wonderful blog entries on the SAS/IML language */
+/* and all of its neat features. Check out his blog for IML tips:                        */
+/* https://blogs.sas.com/content/iml/                                                    */
+/* Enthusiastic thanks to Dr. John Ruscio and his original RProbSup package,             */
+/* which this program implements for use in SAS.                                         */
+/* This package as well as other programs are accessible at John's website below:        */
+/* https://ruscio.pages.tcnj.edu/quantitative-methods-program-code/                      */
+/* For a discussion of the A statistic and its variants, please refer to                 */
+/* Ruscio & Gera (2013)	 						                                                 		 */
+
+
+/* What follows is a specification of the values and formats the parameters of the macro */
+/* program will accept. 							                                                 	 */
+
+/* Any membership variables (and any columns in general)  		                      		 */
+/* should consist of numeric type data. 		                                    				 */
+
+/* %A Macro Arguments:	                                                               	 */
+
+/* dsn: The Base SAS dataset to be analyzed.					                                 	 */
+/* For a between-subjects design, data should be in narrow/long format with the          */
+/* membership variable as the first column.				                                   	 	 */
+/* For a within-subjects design, data should be in wide format, with each observation    */
+/* representing a person and each column representing a variable with their score.       */
+
+/* design: Specification of the type of analysis designed.				                       */
+/* 1 = between-subjects analysis (DEFAULT). 					                                 	 */
+/* 2 = within-subjects analysis. 						                                           	 */
+
+/* statistic: The version of the A statistic to be calculated.			                  	 */
+/* 1 = The A statistic for 2 groups (DEFAULT).	      				                           */
+/* 2 = The A statistic for k groups through the average absolute deviation.	             */
+/* 3 = The A statistic for k groups through the average absolute pairwise deviation.	   */
+/* 4 = The A statistic for k groups, comparing a reference group with the union of all 	 */
+/*     other groups. 							                                                  		 */
+/* 5 = The A statistic for the ordinal comparison of k groups.	                   			 */
+
+/* weights: The weights to be assigned to each group.			                               */
+/* 0 = The data are unweighted (DEFAULT).						                                     */
+/* 1 = The data are are weighted. 		                                        					 */
+/* NOTE: If 1 is entered, the weights should be in the final column.		              	 */
+
+/* increase: Establishes whether scores are expected to correlate with the dummy coding  */
+/*    	     of groups.						                                                			 */
+/* NOTE: This argument is only used if statistic = 5.				                           	 */
+/* 0 = False (DEFAULT). 					                                                 			 */
+/* 1 = True.									                                                         	 */
+
+/* ref: Designates the reference group of comparison.					                           */
+/* NOTE: This argument is only used if statistic = 4.					                           */
+/* 1 = The first group is the reference group (DEFAULT).			                         	 */
+
+/* r: A row vector of proportions that specifies the proportions of the sample base      */
+/*    rates of each group. If specified, the order of the proportions should correspond  */
+/*    to the order of the group codes if between-subjects, or variable columns if        */
+/*    within-subjects. In the macro program, r is entered delimited by a single space.	 */
+/* NOTE: This argument is only used if statistic = 2.				                             */
+/* 0 = Proportions are equal (DEFAULT).							                                     */
+
+/* n_bootstrap: The number of samples generated to construct the bootstrapped sampling   */
+/*		distribution.							                                                      	 */
+/* 1999 = 1,999 samples are used (DEFAULT).					                                  	 */
+
+/* conf_level: The confidence level used to construct the bootstrapped confidence 	     */
+/*	       interval.					                                                    			 */
+/* .95 = Confidence level of 95% (DEFAULT).				                                   		 */
+
+/* ci_method: The method used to construct the bootstrapped confidence interval.	       */
+/* 1 = Bias-corrected and Accelerated (BCa) bootstrap interval (DEFAULT).		             */
+/* 2 = Percentile Interval bootstrap interval.					                               	 */
+
+/* seed: Input for pseudo-random number generation.		                             			 */
+/* 1 = The seed input (DEFAULT).						                                           	 */
+
+/* missing: Determines whether missing values are removed or replaced by a constant.	   */
+/* 0 = Missing values are removed (DEFAULT).		                                 				 */
+/* 1 = Missing values are replaced by the number specified in mconstant=.                */
+
+/* mconstant: Determines the constant to replace missing values with.		               	 */
+/* NOTE: This argument is only used if missing = 1.					                             */
+/* 0 = Missing values are replaced with 0 (DEFAULT).				                          	 */
+
+/* ID: Designates whether the first column includes an ID variable that should be 	     */
+/*     disregarded. 								                                                   	 */
+/* 0 = The first column (ID variable) should be disregarded (DEFAULT).			             */
+/* 1 = The first column does not include an ID variable that should be disregarded.      */
+/* NOTE: If a between-subjects analysis is desired and ID = 0, the second column should  */
+/*       contain the membership codes.							                                     */
+/*       If the ID variable is the stratification variable for a between-subjects        */
+/*       analysis, then argument should be set to 1. 				                          	 */
+
+/* LASTLY: Note that the SAS/IML functions called by the macro program are designed to   */
+/* 	       be used independently if desired. The arguments detailed above differ only in */
+/*         the following way for these functions: A1() | CalcA1() | A2() | CalcA2()      */
+/*         The arguments for the input of data are split into y1 and y2. Each should be  */
+/*         row vectors.									 */
+/*         In addition, some functions will have parameters that specify default weight  */
+/*	       values. These are meant to prevent errors in certain instances if weights = 1 */
+/*         is mistakenly selected without a weight column in the input data and may be 	 */
+/*         ignored.					      			                                                 */
+
+/*MODIFY THE MACRO VARIABLE BELOW TO EXPORT RESULTS AS A .SAS7BDAT FILE TO YOUR LOCATION */
+/*			                                OF CHOICE.				                               */
+%let filepath = /folders/myfolders;
+libname lib "&filepath";
+
+/*MODIFY THE MACRO VARIABLE BELOW TO STORE THE MODULES TO YOUR LOCATION OF CHOICE.       */
+%let moduleloc = lib.MyModules;
+
+%macro A(dsn,design=1,statistic=1,weights=0,increase=0,ref=1,r=0,n_bootstrap=1999,
+         conf_level=.95,ci_method=1,seed=1,missing=0,mconstant=0,ID=0);
+     %let start = 1;
+     /*Conditional code below allows for compound evaluation of statistic+design
+       combinations to determine appropriate SAS/IML function*/
+     %if &design = 1 %then %let multiplier = 5;
+     %else %if &design = 2 %then %let multiplier = 6;
+
+     proc sql noprint;
+     	select name into :var1-
+     	from dictionary.columns
+     	where memname=%upcase("&dsn");
+     quit;
+
+	data master;
+		set &dsn;
+		%if &ID = 0 %then %do;
+			drop &var1;
+			%let start = 2;
+		%end;
+		%if &missing = 0 %then %do;
+			%do i=&start %to &sqlobs;
+				where &&var&i is not missing;
+			%end;
+		%end;
+		%else %if &missing = 1 %then %do;
+			%do i=&start %to &sqlobs;
+				if &&var&i = . then &&var&i = &mconstant;
+			%end;
+		%end;
+	run;
+
+	/*Conditional code below runs appropriate SAS/IML function based on the product
+	  of macro variables &multiplier (value determined by design) and &statistic*/
+	%if %eval(&statistic * &multiplier) = 5 %then %do;
+		/*When statistic = 1 and design = 1 */
+		proc iml;
+			use master;
+				read all var _NUM_ into dsn[colname=names];
+			close master;
+			reset storage = &moduleloc;
+			load module=(A1 CalcA1);
+			gr = unique(dsn[,1]);
+			if &weights = 0 then
+				results = A1(t(dsn[loc(dsn[,1]=gr[,1]),2]),t(dsn[loc(dsn[,1]=gr[,2]),2]),&weights,
+				             ,,&n_bootstrap,&conf_level,&ci_method,&seed);
+			else if &weights = 1 then
+				results = A1(t(dsn[loc(dsn[,1]=gr[,1]),2]),t(dsn[loc(dsn[,1]=gr[,2]),2]),&weights,
+				             t(dsn[loc(dsn[,1]=gr[,1]),3]),t(dsn[loc(dsn[,1]=gr[,2]),2]),&n_bootstrap,
+				             &conf_level,&ci_method,&seed);
+			create lib.A_Analysis from results[colname={"Retained Cases" "a" "SE" "CI_L"
+								    "CI_U"}];
+				append from results;
+			close lib.A_Analysis;
+		quit;
+	%end;
+	%else %if %eval(&statistic * &multiplier) = 10 %then %do;
+		/*When statistic = 2 and design = 1 */
+		proc iml;
+		use master;
+				read all var _NUM_ into dsn[colname=names];
+			close master;
+			reset storage = &moduleloc;
+			load module=(AAD1 CalcAAD1);
+			results = AAD1(dsn,rowvec({&r}),&weights,&n_bootstrap,&conf_level,&ci_method,&seed);
+			create lib.A_Analysis from results[colname={"Retained Cases" "a" "SE" "CI_L"
+								    "CI_U"}];
+				append from results;
+			close lib.A_Analysis;
+		quit;
+	%end;
+	%else %if %eval(&statistic * &multiplier) = 15 %then %do;
+		/*When statistic = 3 and design = 1 */
+		proc iml;
+			use master;
+				read all var _NUM_ into dsn[colname=names];
+			close master;
+			reset storage = &moduleloc;
+			load module=(AAPD1 CalcAAPD1);
+			results = AAPD1(dsn,&weights,&n_bootstrap,&conf_level,&ci_method,&seed);
+			create lib.A_Analysis from results[colname={"Retained Cases" "a" "SE" "CI_L"
+								    "CI_U"}];
+				append from results;
+			close lib.A_Analysis;
+		quit;
+	%end;
+	%else %if %eval(&statistic * &multiplier) = 20 %then %do;
+		/*When statistic = 4 and design = 1 */
+		proc iml;
+			use master;
+				read all var _NUM_ into dsn[colname=names];
+			close master;
+			reset storage = &moduleloc;
+			load module=(IK1 CalcIK1);
+			results = IK1(dsn,&ref,&weights,&n_bootstrap,&conf_level,&ci_method,&seed);
+			create lib.A_Analysis from results[colname={"Retained Cases" "a" "SE" "CI_L"
+								    "CI_U"}];
+				append from results;
+			close lib.A_Analysis;
+		quit;
+	%end;
+	%else %if %eval(&statistic * &multiplier) = 25 %then %do;
+		/*When statistic = 5 and design = 1 */
+		proc iml;
+			use master;
+				read all var _NUM_ into dsn[colname=names];
+			close master;
+			reset storage = &moduleloc;
+			load module=(Ord1 CalcOrd1);
+			results = Ord1(dsn,&weights,&increase,&n_bootstrap,&conf_level,&ci_method,&seed);
+			create lib.A_Analysis from results[colname={"Retained Cases" "a" "SE" "CI_L"
+								    "CI_U"}];
+				append from results;
+			close lib.A_Analysis;
+		quit;
+	%end;
+	%else %if %eval(&statistic * &multiplier) = 6 %then %do;
+		/*When statistic = 1 and design = 2 */
+		proc iml;
+			use master;
+				read all var _NUM_ into dsn[colname=names];
+			close master;
+			reset storage = &moduleloc;
+			load module=(A2 CalcA2);
+			if &weights = 0 then
+				results = A2(t(dsn[,1]),t(dsn[,2]),&weights,,
+				             &n_bootstrap,&conf_level,&ci_method,&seed);
+			else if &weights = 1 then
+				results = A2(t(dsn[,1]),t(dsn[,2]),&weights,
+				             t(dsn[,3]),&n_bootstrap,&conf_level,&ci_method,&seed);
+			create lib.A_Analysis from results[colname={"Retained Cases" "a" "SE" "CI_L"
+								    "CI_U"}];
+				append from results;
+			close lib.A_Analysis;
+		quit;
+	%end;
+	%else %if %eval(&statistic * &multiplier) = 12 %then %do;
+		/*When statistic = 2 and design = 2 */
+		proc iml;
+			use master;
+				read all var _NUM_ into dsn[colname=names];
+			close master;
+			reset storage = &moduleloc;
+			load module=(AAD2 CalcAAD2);
+			results = AAD2(dsn,rowvec({&r}),&weights,&n_bootstrap,&conf_level,&ci_method,&seed);
+			create lib.A_Analysis from results[colname={"Retained Cases" "a" "SE" "CI_L"
+								    "CI_U"}];
+				append from results;
+			close lib.A_Analysis;
+		quit;
+	%end;
+	%else %if %eval(&statistic * &multiplier) = 18 %then %do;
+		/*When statistic = 3 and design = 2 */
+		proc iml;
+			use master;
+				read all var _NUM_ into dsn[colname=names];
+			close master;
+			reset storage = &moduleloc;
+			load module=(AAPD2 CalcAAPD2);
+			results = AAPD2(dsn,&weights,&n_bootstrap,&conf_level,&ci_method,&seed);
+			create lib.A_Analysis from results[colname={"Retained Cases" "a" "SE" "CI_L"
+								    "CI_U"}];
+				append from results;
+			close lib.A_Analysis;
+		quit;
+	%end;
+	%else %if %eval(&statistic * &multiplier) = 24 %then %do;
+		/*When statistic = 4 and design = 2 */
+		proc iml;
+			use master;
+				read all var _NUM_ into dsn[colname=names];
+			close master;
+			reset storage = &moduleloc;
+			load module=(IK2 CalcIK2);
+			results = IK2(dsn,&ref,&weights,&n_bootstrap,&conf_level,&ci_method,&seed);
+			create lib.A_Analysis from results[colname={"Retained Cases" "a" "SE" "CI_L"
+								    "CI_U"}];
+				append from results;
+			close lib.A_Analysis;
+		quit;
+	%end;
+	%else %if %eval(&statistic * &multiplier) = 30 %then %do;
+		/*When statistic = 5 and design = 2 */
+		proc iml;
+			use master;
+				read all var _NUM_ into dsn[colname=names];
+			close master;
+			reset storage = &moduleloc;
+			load module=(Ord2 CalcOrd2);
+			results = Ord2(dsn,&weights,&increase,&n_bootstrap,&conf_level,&ci_method,&seed);
+			create lib.A_Analysis from results[colname={"Retained Cases" "a" "SE" "CI_L"
+							   	    "CI_U"}];
+				append from results;
+			close lib.A_Analysis;
+		quit;
+	%end;
+%mend A;
+
+/*A() functions are made in a single proc iml step below */
+
+proc iml;
+/********************************************************************************************/
+	start A1(y1, y2, weights = 0, w1 =  repeat(1,1,ncol(y1)),w2 = repeat(1,1,ncol(y2)),
+	         n_bootstrap = 1999,conf_level = .95, ci_method = 1, seed = 1);
+    	call randseed(seed);
+    	n1 = ncol(y1);
+    	n2 = ncol(y2);
+    	a = CalcA1(y1,y2,weights,w1,w2);
+		/*Computation of bootstrapped CI*/
+		alpha = 1 - conf_level;
+		a_boot = repeat(0,n_bootstrap,1);
+		cases1 = sample(1:n1,ncol(y1)||n_bootstrap);
+		cases2 = sample(1:n2,ncol(y2)||n_bootstrap);
+		do i=1 to n_bootstrap;
+			a_boot[i,] = CalcA1(y1[,cases1[i,]],y2[,cases2[i,]],weights,
+								    w1[,cases1[i,]],w2[,cases2[i,]]);
+		end;
+		SE = std(a_boot);
+		/*Code for additional BCA calculations below */
+		if ci_method = 1 then do;
+			pi = constant("pi");
+			ci_lower = pi;
+			ci_upper = pi;
+			call sort(a_boot);
+			if min(a_boot) = max(a_boot) then do;
+				ci_lower = a_boot[1,];
+				ci_upper = ci_lower;
+			end;
+			if a < min(a_boot) | a > max(a_boot) then do;
+				ci_lower = a_boot[round(alpha / 2) * n_bootstrap,];
+				ci_upper = a_boot[round(1 - alpha / 2) * n_bootstrap,];
+			end;
+			if ci_lower = pi & ci_upper = pi then do;
+				/*Computes bias-correction parameter */
+				area = sum(a_boot < a) / n_bootstrap;
+				if area <= 0 then area = .00001;
+				else if area >= 1 then area = .99999;
+				z0 = quantile("normal",area);
+				/*Computes acceleration parameter via jacknife */
+				jk_reps = repeat(0,n1+n2,1);
+				do i=1 to n1;
+					jk_reps[i,] = CalcA1(remove(y1,i),y2,weights,remove(w1,i),w2);
+				end;
+				do i=1 to n2;
+					jk_reps[i+n1,] = CalcA1(y1,remove(y2,i),weights,w1,remove(w2,i));
+				end;
+				 jk_mu = mean(jk_reps);
+			 	num = sum((jk_mu - jk_reps)##3);
+			 	den = 6 * sum((jk_mu - jk_reps)##2)##1.5;
+			 	accel = num / den;
+			 	/*Quantile adjustment for BCA */
+				/*Lower bound adjustment */
+			 	zl = z0 + quantile("normal",alpha / 2);
+			 	alpha1 = cdf("normal",z0 + zl / (1 - accel * zl));
+/* 			 	Upper bound adjustment */
+			 	zu = z0 + quantile("normal",1 - alpha / 2);
+			 	alpha2 = cdf("normal",z0 + zu / (1 - accel * zu));
+			 	if alpha1 = . then alpha1 = alpha / 2;
+			 	if alpha2 = . then alpha2 = 1 - alpha / 2;
+			 	call qntl(CI,a_boot,alpha1||alpha2);
+			 	output = (n1 + n2)|| a || SE || t(CI);
+				print output[format=10.3 L="Between-Subjects A Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+			else do;
+				output = (n1 + n2)|| a || SE || (ci_lower || ci_upper);
+				print output[format=10.3 L="Between-Subjects A Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+		end;
+		else do;
+			call qntl(CI,a_boot,alpha / 2 || 1 - alpha / 2);
+			output = (n1 + n2)|| a || SE || t(CI);
+			print output[format=10.3 L="Between-Subjects A Statistic
+				  and Percentile Interval Bootstrap Output"
+				  C={"Retained Cases:" "Observed A:"
+				  "SE" "Lower Bound:" "Upper Bound"}];
+		end;
+		return output;
+	finish;
+/********************************************************************************************/
+    start CalcA1(y1, y2, weights = 0, w1 = repeat(1,1,ncol(y1)), w2 = repeat(1,1,ncol(y2)));
+    	n1 = ncol(y1);
+    	n2 = ncol(y2);
+    	if weights = 0 then do;
+    		r1 = sum(ranktie(y1||y2)[1:n1]);
+    		a = (r1 / n1 - (n1 + 1) / 2) / n2;
+    	end;
+     	else if weights = 1 then do;
+    		num = 0;
+    		den = 0;
+  			if n2 < n1 then do;
+  				yt = y1;
+     			y1 = y2;
+      			y2 = yt;
+      			wt = w1;
+      			w1 = w2;
+      			w2 = wt;
+  			end;
+  			do i=1 to min(n1||n2);
+  				num = num + sum((w1[,i] * w2) # ((y1[,i] > y2) + .5 * (y1[,i] = y2)));
+  				den = den + sum(w1[,i] * w2);
+  			end;
+  			a = num / den;
+  			if n2 < n1 then a = 1 - a;
+  		end;
+  		return a;
+  	finish;
+/********************************************************************************************/
+	start A2(y1, y2, weights = 0,  w = repeat(1,1,ncol(y1)), n_bootstrap = 1999,
+		     conf_level = .95, ci_method = 1, seed = 1);
+		call randseed(seed);
+		n = ncol(y1);
+		a = CalcA2(y1,y2,weights,w);
+		/*Computation of bootstrapped CI*/
+		alpha = 1 - conf_level;
+		a_boot = repeat(0,n_bootstrap,1);
+		cases = sample(1:n,ncol(y1)||n_bootstrap);
+		do i=1 to n_bootstrap;
+			a_boot[i,] = CalcA2(y1[,cases[i,]],y2[,cases[i,]],weights,
+								w[,cases[i,]]);
+		end;
+		SE = std(a_boot);
+		/*Code for additional BCA calculations below */
+		if ci_method = 1 then do;
+			pi = constant("pi");
+			ci_lower = pi;
+			ci_upper = pi;
+			call sort(a_boot);
+			if min(a_boot) = max(a_boot) then do;
+				ci_lower = a_boot[1,];
+				ci_upper = ci_lower;
+			end;
+			if a < min(a_boot) | a > max(a_boot) then do;
+				ci_lower = a_boot[round(alpha / 2) * n_bootstrap,];
+				ci_upper = a_boot[round(1 - alpha / 2) * n_bootstrap,];
+			end;
+			if ci_lower = pi & ci_upper = pi then do;
+				/*Computes bias-correction parameter */
+				area = sum(a_boot <= a)/n_bootstrap;
+				if area <= 0 then area = .00001;
+				else if area >= 1 then area = .99999;
+				z0 = quantile("normal",area);
+				/*Computes acceleration parameter via jacknife */
+				jk_reps = repeat(0,n+n,1);
+				do i=1 to n;
+					jk_reps[i,] = CalcA2(remove(y1,i),remove(y2,i),weights,remove(w,i));
+					jk_reps[i+n,] = CalcA2(remove(y1,i),remove(y2,i),weights,remove(w,i));
+				end;
+				jk_mu = mean(jk_reps);
+				num = sum((jk_mu - jk_reps)##3);
+				den = 6 * (sum((jk_mu - jk_reps)##2))##1.5;
+				accel = num / den;
+				/*Quantile adjustment for BCA */
+				/*Lower bound adjustment */
+				zl = z0 + quantile("normal",alpha / 2);
+				alpha1 = cdf("normal",z0 + zl / (1 - accel * zl));
+				/*Upper bound adjustment */
+				zu = z0 + quantile("normal",1 - alpha / 2);
+				alpha2 = cdf("normal",z0 + zu / (1 - accel * zu));
+				if alpha1 = . then alpha1 = alpha / 2;
+				if alpha2 = . then alpha2 = 1 - alpha / 2;
+				call qntl(CI,a_boot,alpha1||alpha2);
+				output = n|| a || SE || t(CI);
+				print output[format=10.3 L="Within-Subjects A Statistic
+					  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	"SE" "Lower Bound:" "Upper Bound"}];
+			end;
+			else do;
+				output = n || a || SE || (ci_lower || ci_upper);
+				print output[format=10.3 L="Within-Subjects A Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+		end;
+		else do;
+			call qntl(CI,a_boot,alpha / 2 || 1 - alpha / 2);
+			output = n || a || SE || t(CI);
+			print output[format=10.3 L="Within-Subjects A Statistic
+				  and Percentile Interval Bootstrap Output"
+				  C={"Retained Cases:" "Observed A:"
+				  "SE" "Lower Bound:" "Upper Bound"}];
+		end;
+		return output;
+	finish;
+/********************************************************************************************/
+	start CalcA2(y1, y2, weights = 0, w = repeat(1,1,ncol(y1)));
+		num = sum((w # ((y1 > y2) + .5 * (y1 = y2))));
+		den = sum(w);
+		a = num / den;
+		return a;
+	finish;
+/********************************************************************************************/
+	start AAD1(y, r = 0, weights = 0, n_bootstrap = 1999, conf_level = .95, ci_method = 1,
+	           seed = 1);
+		call randseed(seed);
+		n = nrow(y);
+		gr = unique(y[,1]);
+		k = ncol(gr);
+		a_boot = repeat(0,n_bootstrap,1);
+		nk = repeat(0,1,k);
+		a = CalcAAD1(y,r,weights);
+		y_boot = y;
+		do i = 1 to k;
+			nk[,i] = sum(y[,1] = gr[,i]);
+		end;
+		/*Computation of bootstrapped CI*/
+		alpha = 1 - conf_level;
+		do i = 1 to n_bootstrap;
+			do j = 1 to k;
+				y_boot[loc(y[,1] = gr[,j]),2] = t(sample(y[loc(y[,1] = gr[,j]),2]));
+			end;
+			a_boot[i,] = CalcAAD1(y_boot,r,weights);
+		end;
+		SE = std(a_boot);
+		/*Code for additional BCA calculations below */
+		if ci_method = 1 then do;
+			pi = constant("pi");
+			ci_lower = pi;
+			ci_upper = pi;
+			call sort(a_boot);
+			if min(a_boot) = max(a_boot) then do;
+				ci_lower = a_boot[1,];
+				ci_upper = ci_lower;
+			end;
+			if a < min(a_boot) | a > max(a_boot) then do;
+				ci_lower = a_boot[round(alpha / 2) * n_bootstrap,];
+				ci_upper = a_boot[round(1 - alpha / 2) * n_bootstrap,];
+			end;
+			if ci_lower = pi & ci_upper = pi then do;
+				/*Computes bias-correction parameter */
+				area = sum(a_boot <= a)/n_bootstrap;
+				if area <= 0 then area = .00001;
+				else if area >= 1 then area = .99999;
+				z0 = quantile("normal",area);
+				/*Computes acceleration parameter via jacknife */
+				jk_reps = repeat(0,n,1);
+				do i=1 to n;
+					if i ^= 1 & i ^= n then
+						jk_reps[i,] = CalcAAD1(y[(1:i - 1) || (i+1:n),],r,weights);
+					else if i = 1 then jk_reps[i,] = CalcAAD1(y[2:n,],r,weights);
+					else if i = n then jk_reps[i,] = CalcAAD1(y[1:n-1,],r,weights);
+				end;
+				jk_mu = mean(jk_reps);
+				num = sum((jk_mu - jk_reps)##3);
+				den = 6 * (sum((jk_mu - jk_reps)##2))##1.5;
+				accel = num / den;
+				/*Quantile adjustment for BCA */
+				/*Lower bound adjustment */
+				zl = z0 + quantile("normal",alpha / 2);
+				alpha1 = cdf("normal",z0 + zl / (1 - accel * zl));
+				/*Upper bound adjustment */
+				zu = z0 + quantile("normal",1 - alpha / 2);
+				alpha2 = cdf("normal",z0 + zu / (1 - accel * zu));
+				if alpha1 = . then alpha1 = alpha / 2;
+				if alpha2 = . then alpha2 = 1 - alpha / 2;
+				call qntl(CI,a_boot,alpha1||alpha2);
+				output = n|| a || SE || t(CI);
+				print output[format=10.3 L="Between-Subjects AAD Statistic
+					  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+			else do;
+				output = n || a || SE || (ci_lower || ci_upper);
+				print output[format=10.3 L="Between-Subjects AAD Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+		end;
+		else do;
+			call qntl(CI,a_boot,alpha / 2 || 1 - alpha / 2);
+			n = nrow(y);
+			output = n || a || SE || t(CI);
+			print output[format=10.3 L="Between-Subjects AAD Statistic
+				  and Percentile Interval Bootstrap Output"
+			  	  C={"Retained Cases:" "Observed A:"
+			  	  "SE" "Lower Bound:" "Upper Bound"}];
+		end;
+		return output;
+	finish;
+/********************************************************************************************/
+	start CalcAAD1(y, r = 0, weights = 0);
+		gr = unique(y[,1]);
+		k = ncol(gr);
+		if (sum(r) = 0) | (ncol(r) ^= k) then r = repeat(1 / k,1,k);
+		if sum(r) ^= 1 then r = r / sum(r);
+		a = repeat(0,1,k);
+		do i = 1 to k;
+			g1 = y[loc(y[,1] = gr[,i]),2];
+			do j = 1 to k;
+				if i ^= j then do;
+					g2 = y[loc(y[,1] = gr[,j]),2];
+					if weights = 0 then
+						a[,i] = a[,i] + (r[,j] / (1 - r[,i])) * CalcA1(t(g1),t(g2));
+					else do;
+						w1 = y[loc(y[,1] = gr[,i]),3];
+						w2 = y[loc(y[,1] = gr[,j]),3];
+						a[,i] = a[,i] + (r[,j] / (1 - r[,i])) * CalcA1(t(g1),t(g2),1,
+											       t(w1),t(w2));
+					end;
+				end;
+			end;
+		end;
+		aad = mean(t(abs(a - .5))) + .5;
+		return aad;
+	finish;
+/********************************************************************************************/
+	start AAD2(y, r = 0, weights = 0, n_bootstrap = 1999, conf_level = .95, ci_method = 1,
+			   seed = 1);
+		call randseed(seed);
+		if weights = 0 then k = ncol(y);
+		else k = ncol(y) - 1;
+		n = nrow(y);
+		a_boot = repeat(0,n_bootstrap,1);
+		y_boot = y;
+		a = CalcAAD2(y,r,weights);
+		/*Computation of bootstrapped CI*/
+		cases = sample(1:n,n || n_bootstrap);
+		alpha = 1 - conf_level;
+		do i = 1 to n_bootstrap;
+			y_boot[,1:k] = y[cases[i,],1:k];
+			a_boot[i,] = CalcAAD2(y_boot,r,weights);
+		end;
+		SE = std(a_boot);
+		/*Code for additional BCA calculations below */
+		if ci_method = 1 then do;
+			pi = constant("pi");
+			ci_lower = pi;
+			ci_upper = pi;
+			call sort(a_boot);
+			if min(a_boot) = max(a_boot) then do;
+				ci_lower = a_boot[1,];
+				ci_upper = ci_lower;
+			end;
+			if a < min(a_boot) | a > max(a_boot) then do;
+				ci_lower = a_boot[round(alpha / 2) * n_bootstrap,];
+				ci_upper = a_boot[round(1 - alpha / 2) * n_bootstrap,];
+			end;
+			if ci_lower = pi & ci_upper = pi then do;
+				/*Computes bias-correction parameter */
+				area = sum(a_boot <= a)/n_bootstrap;
+				if area <= 0 then area = .00001;
+				else if area >= 1 then area = .99999;
+				z0 = quantile("normal",area);
+				/*Computes acceleration parameter via jacknife */
+				jk_reps = repeat(0,n,1);
+				do i=1 to n;
+					if i ^= 1 & i ^= n then
+						jk_reps[i,] = CalcAAD2(y[(1:i - 1) || (i+1:n),],r,weights);
+					else if i = 1 then jk_reps[i,] = CalcAAD2(y[2:n,],r,weights);
+					else if i = n then jk_reps[i,] = CalcAAD2(y[1:n-1,],r,weights);
+				end;
+				jk_mu = mean(jk_reps);
+				num = sum((jk_mu - jk_reps)##3);
+				den = 6 * (sum((jk_mu - jk_reps)##2))##1.5;
+				accel = num / den;
+				/*Quantile adjustment for BCA */
+				/*Lower bound adjustment */
+				zl = z0 + quantile("normal",alpha / 2);
+				alpha1 = cdf("normal",z0 + zl / (1 - accel * zl));
+				/*Upper bound adjustment */
+				zu = z0 + quantile("normal",1 - alpha / 2);
+				alpha2 = cdf("normal",z0 + zu / (1 - accel * zu));
+				if alpha1 = . then alpha1 = alpha / 2;
+				if alpha2 = . then alpha2 = 1 - alpha / 2;
+				call qntl(CI,a_boot,alpha1||alpha2);
+				output = n|| a || SE || t(CI);
+				print output[format=10.3 L="Within-Subjects AAD Statistic
+					  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+			else do;
+				output = n || a || SE || (ci_lower || ci_upper);
+				print output[format=10.3 L="Within-Subjects AAD Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+		end;
+		else do;
+			call qntl(CI,a_boot,alpha / 2 || 1 - alpha / 2);
+			output = n || a || SE || t(CI);
+			print output[format=10.3 L="Within-Subjects AAD Statistic
+				  and Percentile Interval Bootstrap Output"
+				  C={"Retained Cases:" "Observed A:"
+				  "SE" "Lower Bound:" "Upper Bound"}];
+		end;
+		return output;
+	finish;
+/********************************************************************************************/
+	start CalcAAD2(y, r = repeat(0,1,ncol(y)), weights = 0);
+		k = ncol(y);
+		if weights = 1 then do;
+			k = k -1;
+			r = r - 1;
+		end;
+		if (sum(r) = 0) | (ncol(r) ^= k) then r = repeat(1 / k,1,k);
+		if sum(r) ^= 1 then r = r / sum(r);
+		a = repeat(0,1,k);
+		do i=1 to k;
+			v1 = y[,i];
+			do j=1 to k;
+				if i ^= j then do;
+					v2 = y[,j];
+					if weights = 0 then
+						a[,i] = a[,i] + (r[,j] / (1 - r[,i])) * CalcA2(t(v1),t(v2));
+					else do;
+						w = t(y[,k+1]);
+						a[,i] = a[,i] + (r[,j] / (1 - r[,i])) * CalcA2(t(v1),t(v2),1,w);
+					end;
+				end;
+			end;
+		end;
+		aad = mean(t(abs(a - .5))) + .5;
+		return aad;
+	finish;
+/********************************************************************************************/
+	start AAPD1(y, weights = 0, n_bootstrap = 1999, conf_level = .95, ci_method = 1, seed = 1);
+		call randseed(seed);
+		n = nrow(y);
+		gr = unique(y[,1]);
+		k = ncol(gr);
+		nk = repeat(0,1,k);
+		do i = 1 to k;
+			nk[,i] = sum(y[,1] = gr[,i]);
+		end;
+		y_boot = y;
+		a_boot = repeat(0,n_bootstrap,1);
+		a = CalcAAPD1(y,weights);
+		/*Computation of bootstrapped CI*/
+		alpha = 1 - conf_level;
+	    do i = 1 to n_bootstrap;
+			do j = 1 to k;
+				y_boot[loc(y[,1] = gr[,j]),2] = t(sample(y[loc(y[,1] = gr[,j]),2]));
+			end;
+			a_boot[i,] = CalcAAPD1(y_boot,weights);
+		end;
+		SE = std(a_boot);
+		/*Code for additional BCA calculations below */
+		if ci_method = 1 then do;
+			pi = constant("pi");
+			ci_lower = pi;
+			ci_upper = pi;
+			call sort(a_boot);
+			if min(a_boot) = max(a_boot) then do;
+				ci_lower = a_boot[1,];
+				ci_upper = ci_lower;
+			end;
+			if a < min(a_boot) | a > max(a_boot) then do;
+				ci_lower = a_boot[round(alpha / 2) * n_bootstrap,];
+				ci_upper = a_boot[round(1 - alpha / 2) * n_bootstrap,];
+			end;
+			if ci_lower = pi & ci_upper = pi then do;
+				/*Computes bias-correction parameter */
+				area = sum(a_boot <= a)/n_bootstrap;
+				if area <= 0 then area = .00001;
+				else if area >= 1 then area = .99999;
+				z0 = quantile("normal",area);
+				/*Computes acceleration parameter via jacknife */
+				jk_reps = repeat(0,n,1);
+				do i=1 to n;
+					if i ^= 1 & i ^= n then
+						jk_reps[i,] = CalcAAPD1(y[(1:i - 1) || (i+1:n),],weights);
+					else if i = 1 then jk_reps[i,] = CalcAAPD1(y[2:n,],weights);
+					else if i = n then jk_reps[i,] = CalcAAPD1(y[1:n-1,],weights);
+				end;
+				jk_mu = mean(jk_reps);
+				num = sum((jk_mu - jk_reps)##3);
+				den = 6 * (sum((jk_mu - jk_reps)##2))##1.5;
+				accel = num / den;
+				/*Quantile adjustment for BCA */
+				/*Lower bound adjustment */
+				zl = z0 + quantile("normal",alpha / 2);
+				alpha1 = cdf("normal",z0 + zl / (1 - accel * zl));
+				/*Upper bound adjustment */
+				zu = z0 + quantile("normal",1 - alpha / 2);
+				alpha2 = cdf("normal",z0 + zu / (1 - accel * zu));
+				if alpha1 = . then alpha1 = alpha / 2;
+				if alpha2 = . then alpha2 = 1 - alpha / 2;
+				call qntl(CI,a_boot,alpha1||alpha2);
+				output = n|| a || SE || t(CI);
+				print output[format=10.3 L="Between-Subjects AAPD Statistic
+					  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+			else do;
+				output = n || a || SE || (ci_lower || ci_upper);
+				print output[format=10.3 L="Between-Subjects AAPD Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+		end;
+		else do;
+			call qntl(CI,a_boot,alpha / 2 || 1 - alpha / 2);
+			output = n || a || SE || t(CI);
+			print output[format=10.3 L="Between-Subjects AAPD Statistic
+				  and Percentile Interval Bootstrap Output"
+				  C={"Retained Cases:" "Observed A:"
+				  "SE" "Lower Bound:" "Upper Bound"}];
+		end;
+		return output;
+	finish;
+/********************************************************************************************/
+	start CalcAAPD1(y, weights = 0);
+		gr = unique(y[,1]);
+		k = ncol(gr);
+		a = repeat(0,1, k * (k - 1) / 2);
+		m = 0;
+		do i = 1 to k - 1;
+			do j = i + 1 to k;
+				m = m + 1;
+				g1 = t(y[ loc(y[,1] = gr[,i]) ,2]);
+				g2 = t(y[ loc(y[,1] = gr[,j]) ,2]);
+				if weights = 0 then a[,m] = CalcA1(g1,g2);
+				else do;
+					w1 = t(y[ loc(y[,1] = gr[,i]) ,3]);
+					w2 = t(y[ loc(y[,1] = gr[,j]) ,3]);
+					a[,m] = CalcA1(g1,g2,1,w1,w2);
+				end;
+			end;
+		end;
+		aapd = mean(t(abs(a - .5))) + .5;
+		return aapd;
+	finish;
+/********************************************************************************************/
+	start AAPD2(y, weights = 0, n_bootstrap = 1999, conf_level = .95, ci_method = 1, seed = 1);
+		n = nrow(y);
+		k = ncol(y);
+		if weights = 1 then k = k -1;
+		y_boot = y;
+		a_boot = repeat(0,n_bootstrap,1);
+		a = CalcAAPD2(y,weights);
+		/*Computation of bootstrapped CI*/
+		cases = sample(1:n,n || n_bootstrap);
+		alpha = 1 - conf_level;
+		do i = 1 to n_bootstrap;
+			y_boot[,1:k] = y[cases[i,],1:k];
+			a_boot[i,] = CalcAAPD2(y_boot,weights);
+		end;
+		SE = std(a_boot);
+		/*Code for additional BCA calculations below */
+		if ci_method = 1 then do;
+			pi = constant("pi");
+			ci_lower = pi;
+			ci_upper = pi;
+			call sort(a_boot);
+			if min(a_boot) = max(a_boot) then do;
+				ci_lower = a_boot[1,];
+				ci_upper = ci_lower;
+			end;
+			if a < min(a_boot) | a > max(a_boot) then do;
+				ci_lower = a_boot[round(alpha / 2) * n_bootstrap,];
+				ci_upper = a_boot[round(1 - alpha / 2) * n_bootstrap,];
+			end;
+			if ci_lower = pi & ci_upper = pi then do;
+				/*Computes bias-correction parameter */
+				area = sum(a_boot <= a)/n_bootstrap;
+				if area <= 0 then area = .00001;
+				else if area >= 1 then area = .99999;
+				z0 = quantile("normal",area);
+				/*Computes acceleration parameter via jacknife */
+				jk_reps = repeat(0,n,1);
+				do i=1 to n;
+					if i ^= 1 & i ^= n then
+						jk_reps[i,] = CalcAAPD2(y[(1:i - 1) || (i+1:n),],weights);
+					else if i = 1 then jk_reps[i,] = CalcAAPD2(y[2:n,],weights);
+					else if i = n then jk_reps[i,] = CalcAAPD2(y[1:n-1,],weights);
+				end;
+				jk_mu = mean(jk_reps);
+				num = sum((jk_mu - jk_reps)##3);
+				den = 6 * (sum((jk_mu - jk_reps)##2))##1.5;
+				accel = num / den;
+				/*Quantile adjustment for BCA */
+				/*Lower bound adjustment */
+				zl = z0 + quantile("normal",alpha/ 2);
+				alpha1 = cdf("normal",z0 + zl / (1 - accel * zl));
+				/*Upper bound adjustment */
+				zu = z0 + quantile("normal",1 - alpha / 2);
+				alpha2 = cdf("normal",z0 + zu / (1 - accel * zu));
+				if alpha1 = . then alpha1 = alpha / 2;
+				if alpha2 = . then alpha2 = 1 - alpha / 2;
+				call qntl(CI,a_boot,alpha1||alpha2);
+				output = n|| a || SE || t(CI);
+				print output[format=10.3 L="Within-Subjects AAPD Statistic
+					  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+			else do;
+				output = n || a || SE || (ci_lower || ci_upper);
+				print output[format=10.3 L="Within-Subjects AAPD Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+		end;
+		else do;
+			call qntl(CI,a_boot,alpha / 2 || 1 - alpha/ 2);
+			output = n || a || SE || t(CI);
+			print output[format=10.3 L="Within-Subjects AAPD Statistic
+				  and Percentile Interval Bootstrap Output"
+				  C={"Retained Cases:" "Observed A:"
+				  "SE" "Lower Bound:" "Upper Bound"}];
+		end;
+		return output;
+	finish;
+/********************************************************************************************/
+	start CalcAAPD2(y, weights = 0);
+		k = ncol(y);
+		if weights = 1 then k = k - 1;
+		a = repeat(0,1, k * (k - 1) / 2);
+		m = 0;
+		do i = 1 to k - 1;
+			do j = i + 1 to k;
+				m = m + 1;
+				v1 = t(y[, i]);
+				v2 = t(y[, j]);
+				if weights = 0 then a[,m] = CalcA2(v1,v2);
+				else do;
+					w = t(y[,k+1]);
+					a[,m] = CalcA2(v1,v2,0,w);
+				end;
+			end;
+		end;
+		aapd = mean(t(abs(a - .5))) + .5;
+		return aapd;
+	finish;
+/********************************************************************************************/
+	start Ik1(y, ref = 1, weights = 0, n_bootstrap = 1999, conf_level = .95, ci_method = 1,
+			  seed = 1);
+		call randseed(seed);
+		n = nrow(y);
+		gr = unique(y[,1]);
+		k = ncol(gr);
+		nk = repeat(0,1,k);
+		do i = 1 to k;
+			nk[,i] = sum(y[,1] = gr[,i]);
+		end;
+		y_boot = y;
+		a_boot = repeat(0,n_bootstrap,1);
+		a = CalcIK1(y,ref,weights);
+		/*Computation of bootstrapped CI*/
+		alpha = 1 - conf_level;
+		do i = 1 to n_bootstrap;
+			do j = 1 to k;
+				y_boot[loc(y[,1] = gr[,j]),2] = t(sample(y[loc(y[,1] = gr[,j]),2]));
+			end;
+			a_boot[i,] = CalcIK1(y_boot,ref,weights);
+		end;
+		SE = std(a_boot);
+		/*Code for additional BCA calculations below */
+		if ci_method = 1 then do;
+			pi = constant("pi");
+			ci_lower = pi;
+			ci_upper = pi;
+			call sort(a_boot);
+			if min(a_boot) = max(a_boot) then do;
+				ci_lower = a_boot[1,];
+				ci_upper = ci_lower;
+			end;
+			if a < min(a_boot) | a > max(a_boot) then do;
+				ci_lower = a_boot[round(alpha / 2) * n_bootstrap,];
+				ci_upper = a_boot[round(1 - alpha / 2) * n_bootstrap,];
+			end;
+			if ci_lower = pi & ci_upper = pi then do;
+				/*Computes bias-correction parameter */
+				area = sum(a_boot <= a)/n_bootstrap;
+				if area <= 0 then area = .00001;
+				else if area >= 1 then area = .99999;
+				z0 = quantile("normal",area);
+				/*Computes acceleration parameter via jacknife */
+				jk_reps = repeat(0,n,1);
+				do i=1 to n;
+					if i ^= 1 & i ^= n then
+						jk_reps[i,] = CalcIK1(y[(1:i - 1) || (i+1:n),],ref,weights);
+					else if i = 1 then jk_reps[i,] = CalcIK1(y[2:n,],ref,weights);
+					else if i = n then jk_reps[i,] = CalcIK1(y[1:n-1,],ref,weights);
+				end;
+				jk_mu = mean(jk_reps);
+				num = sum((jk_mu - jk_reps)##3);
+				den = 6 * (sum((jk_mu - jk_reps)##2))##1.5;
+				accel = num / den;
+				/*Quantile adjustment for BCA */
+				/*Lower bound adjustment */
+				zl = z0 + quantile("normal",alpha / 2);
+				alpha1 = cdf("normal",z0 + zl / (1 - accel * zl));
+				/*Upper bound adjustment */
+				zu = z0 + quantile("normal",1 - alpha / 2);
+				alpha2 = cdf("normal",z0 + zu / (1 - accel * zu));
+				if alpha1 = . then alpha1 = alpha / 2;
+				if alpha2 = . then alpha2 = 1 - alpha / 2;
+				call qntl(CI,a_boot,alpha1||alpha2);
+				output = n|| a || SE || t(CI);
+				print output[format=10.3 L="Between-Subjects IK Statistic
+					  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+			      	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+			else do;
+				output = n || a || SE || (ci_lower || ci_upper);
+				print output[format=10.3 L="Between-Subjects IK Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+		end;
+		else do;
+			call qntl(CI,a_boot,alpha / 2 || 1 - alpha / 2);
+			output = n || a || SE || t(CI);
+			print output[format=10.3 L="Between-Subjects IK Statistic
+				  and Percentile Interval Bootstrap Output"
+		    	  C={"Retained Cases:" "Observed A:"
+			      "SE" "Lower Bound:" "Upper Bound"}];
+		end;
+		return output;
+	finish;
+/********************************************************************************************/
+	start CalcIK1(y, ref = 1, weights = 0);
+		g1 = t(y[loc(y[,1] = ref),2]);
+		g2 = t(y [loc(y[,1] ^= ref),2]);
+		if weights = 0 then a = CalcA1(g1,g2);
+		else do;
+			w1 = t(y[loc(y[,1] = ref),3]);
+			w2 = t(y[loc(y[,1] ^= ref),3]);
+			a = CalcA1(g1,g2,weights,w1,w2);
+		end;
+		return a;
+	finish;
+/********************************************************************************************/
+	start IK2(y, ref = 1, weights = 0, n_bootstrap = 1999, conf_level = .95, ci_method = 1,
+			  seed = 1);
+		call randseed(seed);
+		n = nrow(y);
+		k = ncol(y);
+		if weights = 1 then k = k -1;
+		y_boot = y;
+		a_boot = repeat(0,n_bootstrap,1);
+		a = CalcIK2(y, ref, weights);
+		/*Computation of bootstrapped CI*/
+		cases = sample(1:n,n || n_bootstrap);
+		alpha = 1 - conf_level;
+		do i = 1 to n_bootstrap;
+			y_boot[,1:k] = y[cases[i,],1:k];
+			a_boot[i,] = CalcIK2(y_boot,ref,weights);
+		end;
+		SE = std(a_boot);
+		/*Code for additional BCA calculations below */
+		if ci_method = 1 then do;
+			pi = constant("pi");
+			ci_lower = pi;
+			ci_upper = pi;
+			call sort(a_boot);
+			if min(a_boot) = max(a_boot) then do;
+				ci_lower = a_boot[1,];
+				ci_upper = ci_lower;
+			end;
+			if a < min(a_boot) | a > max(a_boot) then do;
+				ci_lower = a_boot[round(alpha / 2) * n_bootstrap,];
+				ci_upper = a_boot[round(1 - alpha / 2) * n_bootstrap,];
+			end;
+			if ci_lower = pi & ci_upper = pi then do;
+				/*Computes bias-correction parameter */
+				area = sum(a_boot <= a)/n_bootstrap;
+				if area <= 0 then area = .00001;
+				else if area >= 1 then area = .99999;
+				z0 = quantile("normal",area);
+				/*Computes acceleration parameter via jacknife */
+				jk_reps = repeat(0,n,1);
+				do i=1 to n;
+					if i ^= 1 & i ^= n then
+						jk_reps[i,] = CalcIK2(y[(1:i - 1) || (i+1:n),],ref,weights);
+					else if i = 1 then jk_reps[i,] = CalcIK2(y[2:n,],ref,weights);
+					else if i = n then jk_reps[i,] = CalcIK2(y[1:n-1,],ref,weights);
+				end;
+				jk_mu = mean(jk_reps);
+				num = sum((jk_mu - jk_reps)##3);
+				den = 6 * (sum((jk_mu - jk_reps)##2))##1.5;
+				accel = num / den;
+				/*Quantile adjustment for BCA */
+				/*Lower bound adjustment */
+				zl = z0 + quantile("normal",alpha / 2);
+				alpha1 = cdf("normal",z0 + zl / (1 - accel * zl));
+				/*Upper bound adjustment */
+				zu = z0 + quantile("normal",1 - alpha / 2);
+				alpha2 = cdf("normal",z0 + zu / (1 - accel * zu));
+				if alpha1 = . then alpha1 = alpha / 2;
+				if alpha2 = . then alpha2 = 1 - alpha / 2;
+				call qntl(CI,a_boot,alpha1||alpha2);
+				output = n|| a || SE || t(CI);
+				print output[format=10.3 L="Within-Subjects IK Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				 	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+			else do;
+				output = n || a || SE || (ci_lower || ci_upper);
+				print output[format=10.3 L="Within-Subjects IK Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+		end;
+		else do;
+			call qntl(CI,a_boot,alpha / 2 || 1 - alpha / 2);
+			output = n || a || SE || t(CI);
+			print output[format=10.3 L="Within-Subjects IK Statistic
+				  and Percentile Interval Bootstrap Output"
+				  C={"Retained Cases:" "Observed A:"
+				  "SE" "Lower Bound:" "Upper Bound"}];
+		end;
+		return output;
+	finish;
+/********************************************************************************************/
+	start CalcIK2(y, ref = 1, weights = 0);
+		k = ncol(y);
+		gref = (1:k)[,ref];
+		if weights = 1 then k = k -1;
+		v1 = repeat(t(y[,gref]),1,k - 1);
+		v2 = rowvec(y[,remove(1:k,gref)]);
+		if weights = 0 then a = CalcA2(v1,v2);
+		else do;
+			w = t(repeat(y[,k+1],k - 1));
+			a = CalcA2(v1,v2,1,w);
+		end;
+		return a;
+	finish;
+/********************************************************************************************/
+	start Ord1(y, weights = 0, increase = 0, n_bootstrap = 1999, conf_level = .95,
+		       ci_method = 1, seed = 1);
+		call randseed(seed);
+		n = nrow(y);
+		gr = unique(y[,1]);
+		k = ncol(gr);
+		nk = repeat(0,1,k);
+		do i = 1 to k;
+			nk[,i] = sum(y[,1] = gr[,i]);
+		end;
+		y_boot = y;
+		a_boot = repeat(0,n_bootstrap,1);
+		a = CalcOrd1(y,weights,increase);
+		/*Computation of bootstrapped CI*/
+		alpha = 1 - conf_level;
+		do i = 1 to n_bootstrap;
+			do j = 1 to k;
+				y_boot[loc(y[,1] = gr[,j]),2] = t(sample(y[loc(y[,1] = gr[,j]),2]));
+			end;
+			a_boot[i,] = CalcOrd1(y_boot,weights,increase);
+		end;
+		SE = std(a_boot);
+		/*Code for additional BCA calculations below */
+		if ci_method = 1 then do;
+			pi = constant("pi");
+			ci_lower = pi;
+			ci_upper = pi;
+			call sort(a_boot);
+			if min(a_boot) = max(a_boot) then do;
+				ci_lower = a_boot[1,];
+				ci_upper = ci_lower;
+			end;
+			if a < min(a_boot) | a > max(a_boot) then do;
+				ci_lower = a_boot[round(alpha / 2) * n_bootstrap,];
+				ci_upper = a_boot[round(1 - alpha / 2) * n_bootstrap,];
+			end;
+			if ci_lower = pi & ci_upper = pi then do;
+				/*Computes bias-correction parameter */
+				area = sum(a_boot <= a)/n_bootstrap;
+				if area <= 0 then area = .00001;
+				else if area >= 1 then area = .99999;
+				z0 = quantile("normal",area);
+				/*Computes acceleration parameter via jacknife */
+				jk_reps = repeat(0,n,1);
+				do i=1 to n;
+					if i ^= 1 & i ^= n then
+						jk_reps[i,] = CalcOrd1(y[(1:i - 1) || (i+1:n),],weights,increase);
+					else if i = 1 then jk_reps[i,] = CalcOrd1(y[2:n,],weights,increase);
+					else if i = n then jk_reps[i,] = CalcOrd1(y[1:n-1,],weights,increase);
+				end;
+				jk_mu = mean(jk_reps);
+				num = sum((jk_mu - jk_reps)##3);
+				den = 6 * (sum((jk_mu - jk_reps)##2))##1.5;
+				accel = num / den;
+				/*Quantile adjustment for BCA */
+				/*Lower bound adjustment */
+				zl = z0 + quantile("normal",alpha / 2);
+				alpha1 = cdf("normal",z0 + zl / (1 - accel * zl));
+				/*Upper bound adjustment */
+				zu = z0 + quantile("normal",1 - alpha / 2);
+				alpha2 = cdf("normal",z0 + zu / (1 - accel * zu));
+				if alpha1 = . then alpha1 = alpha / 2;
+				if alpha2 = . then alpha2 = 1 - alpha / 2;
+				call qntl(CI,a_boot,alpha1||alpha2);
+				output = n|| a || SE || t(CI);
+				print output[format=10.3 L="Between-Subjects Ordinal A Statistic
+			  		  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+			  	      "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+			else do;
+				output = n || a || SE || (ci_lower || ci_upper);
+				print output[format=10.3 L="Between-Subjects Ordinal A Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+		end;
+		else do;
+			call qntl(CI,a_boot,alpha / 2 || 1 - alpha / 2);
+			output = n || a || SE || t(CI);
+			print output[format=10.3 L="Between-Subjects Ordinal A Statistic
+				  and Percentile Interval Bootstrap Output"
+		   		  C={"Retained Cases:" "Observed A:"
+			      "SE" "Lower Bound:" "Upper Bound"}];
+		end;
+	return output;
+	finish;
+/********************************************************************************************/
+	start CalcOrd1(y, weights = 0, increase = 0);
+		gr = unique(y[,1]);
+		k = ncol(gr);
+		a = repeat(0,k - 1,1);
+		do i = 1 to k - 1;
+			g1 = t(y[loc(y[,1] = gr[,i]),2]);
+			g2 = t(y[loc(y[,1] = gr[,i + 1]),2]);
+			if weights = 0 then a[i,] = CalcA1(g1,g2);
+			else do;
+				w1 = t(y[loc(y[,1] = gr[,i]),3]);
+				w2 = t(y[loc(y[,1] = gr[,i + 1]),3]);
+				a[i,] = CalcA1(g1,g2,1,w1,w2);
+			end;
+		end;
+		if increase = 1 then a_ord = 1 - mean(a);
+		else a_ord = mean(a);
+		return a_ord;
+	finish;
+/********************************************************************************************/
+	start Ord2(y, weights = 0, increase = 0, n_bootstrap = 1999, conf_level = .95,
+			   ci_method = 1, seed = 1);
+		call randseed(seed);
+		n = nrow(y);
+		k = ncol(y);
+		if weights = 1 then k = k -1;
+		y_boot = y;
+		a_boot = repeat(0,n_bootstrap,1);
+		a = CalcOrd2(y,weights,increase);
+		/*Computation of bootstrapped CI*/
+		cases = sample(1:n,n || n_bootstrap);
+		alpha = 1 - conf_level;
+		do i = 1 to n_bootstrap;
+			y_boot[,1:k] = y[cases[i,],1:k];
+			a_boot[i,] = CalcOrd2(y_boot,weights,increase);
+		end;
+		SE = std(a_boot);
+		/*Code for additional BCA calculations below */
+		if ci_method = 1 then do;
+			pi = constant("pi");
+			ci_lower = pi;
+			ci_upper = pi;
+			call sort(a_boot);
+			if min(a_boot) = max(a_boot) then do;
+				ci_lower = a_boot[1,];
+				ci_upper = ci_lower;
+			end;
+			if a < min(a_boot) | a > max(a_boot) then do;
+				ci_lower = a_boot[round(alpha / 2) * n_bootstrap,];
+				ci_upper = a_boot[round(1 - alpha / 2) * n_bootstrap,];
+			end;
+			if ci_lower = pi & ci_upper = pi then do;
+				/*Computes bias-correction parameter */
+				area = sum(a_boot <= a)/n_bootstrap;
+				if area <= 0 then area = .00001;
+				else if area >= 1 then area = .99999;
+				z0 = quantile("normal",area);
+				/*Computes acceleration parameter via jacknife */
+				jk_reps = repeat(0,n,1);
+				do i=1 to n;
+					if i ^= 1 & i ^= n then
+						jk_reps[i,] = CalcOrd2(y[(1:i - 1) || (i+1:n),],weights,increase);
+					else if i = 1 then jk_reps[i,] = CalcOrd2(y[2:n,],weights,increase);
+					else if i = n then jk_reps[i,] = CalcOrd2(y[1:n-1,],weights,increase);
+				end;
+				jk_mu = mean(jk_reps);
+				num = sum((jk_mu - jk_reps)##3);
+				den = 6 * (sum((jk_mu - jk_reps)##2))##1.5;
+				accel = num / den;
+				/*Quantile adjustment for BCA */
+				/*Lower bound adjustment */
+				zl = z0 + quantile("normal",alpha / 2);
+				alpha1 = cdf("normal",z0 + zl / (1 - accel * zl));
+				/*Upper bound adjustment */
+				zu = z0 + quantile("normal",1 - alpha / 2);
+				alpha2 = cdf("normal",z0 + zu / (1 - accel * zu));
+				if alpha1 = . then alpha1 = alpha / 2;
+				if alpha2 = . then alpha2 = 1 - alpha / 2;
+				call qntl(CI,a_boot,alpha1||alpha2);
+				output = n|| a || SE || t(CI);
+				print output[format=10.3 L="Within-Subjects Ordinal A Statistic
+					  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				      "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+			else do;
+				output = n || a || SE || (ci_lower || ci_upper);
+				print output[format=10.3 L="Within-Subjects Ordinal A Statistic
+				 	  and BCA Bootstrap Output" C={"Retained Cases:" "Observed A:"
+				  	  "SE" "Lower Bound:" "Upper Bound"}];
+			end;
+		end;
+		else do;
+			call qntl(CI,a_boot,alpha / 2 || 1 - alpha / 2);
+			output = n || a || SE || t(CI);
+			print output[format=10.3 L="Within-Subjects Ordinal A Statistic
+				  and Percentile Interval Bootstrap Output"
+				  C={"Retained Cases:" "Observed A:"
+				  "SE" "Lower Bound:" "Upper Bound"}];
+		end;
+		return output;
+	finish;
+/********************************************************************************************/
+	start CalcOrd2(y, weights = 0, increase = 0);
+		n = nrow(y);
+		k = ncol(y);
+		if weights = 1 then k = k -1;
+		a = repeat(0,1,k-1);
+		do i =1 to k -1;
+			v1 = t(y[,i]);
+			v2 = t(y[,i + 1]);
+			if weights = 0 then a[,i] = CalcA2(v1,v2);
+			else do;
+				w = t(y[,k + 1]);
+				a[,i] = CalcA2(v1,v2,1,w);
+			end;
+		end;
+		if increase = 1 then a_ord = 1 - mean(t(a));
+		else a_ord = mean(t(a));
+		return a_ord;
+	finish;
+/********************************************************************************************/
+/*  			DESIGNATION OF STORAGE LOCATION FOR MODULES.			    */
+	reset storage = &moduleloc;
+	store module=_all_;
+/********************************************************************************************/
+quit;
