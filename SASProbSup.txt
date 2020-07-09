@@ -11,7 +11,7 @@
 /* Maintainer: Daniel Mattei <DMattei@live.com>			               */
 /* Version 1.0							               */
 /* See the README.txt in the repository for details of use:		       */
-/* https://github.com/BrainofTheseus/SASProbSup/blob/master/README.txt         */
+/* https://github.com/DanielAMattei/SASProbSup/blob/master/README.txt          */
 
 /*MODIFY THE MACRO VARIABLE BELOW TO EXPORT RESULTS AS A .SAS7BDAT FILE TO YOUR LOCATION */
 /*			   	   OF CHOICE.			                         */
