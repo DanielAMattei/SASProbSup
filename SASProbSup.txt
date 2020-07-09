@@ -10,6 +10,7 @@
 /* Author: Daniel Mattei. https://www.linkedin.com/in/daniel-mattei-392929137/ */
 /* Maintainer: Daniel Mattei <DMattei@live.com>			               */
 /* Version 1.0							               */
+/* See the README.txt in the repository for details of use.		       */
 
 /*MODIFY THE MACRO VARIABLE BELOW TO EXPORT RESULTS AS A .SAS7BDAT FILE TO YOUR LOCATION */
 /*			   	   OF CHOICE.			                         */
