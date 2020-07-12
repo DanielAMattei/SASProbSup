@@ -13,7 +13,8 @@
 
 /* This program is an implementation of RProbSup's functionality in SAS.  	         */
 /* It is designed for those interested in computing variants of the A statistic, a       */
-/* non-parametric form of the common language (CL) effect-size statistic.                */
+/* non-parametric form of the common language (CL) effect-size statistic, as well as     */
+/* bootstrapped confidence intervals of the estimate.                                    */
 /* Although this program uses SAS/IML, it is designed for those most comfortable         */
 /* With Base SAS - No interaction with SAS/IML is required, simply the macro program     */
 /* provided and a few macro variables. However, the SAS/IML functions called by the      */
